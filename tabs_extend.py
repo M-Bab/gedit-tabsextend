@@ -26,17 +26,11 @@ ACTIONS_UI = """<ui>
         <menu name="FileMenu" action="File">
             <placeholder name="FileOps_2">
                 <menuitem name="UndoClose" action="UndoClose"/>
+                <menuitem name="CloseAll" action="CloseAll"/>
+                <menuitem name="CloseOthers" action="CloseOthers"/>
             </placeholder>
         </menu>
     </menubar>
-
-    <popup name="NotebookPopup" action="NotebookPopupAction">
-        <placeholder name="NotebookPupupOps_1">
-            <menuitem name="UndoClose" action="UndoClose"/>
-            <menuitem name="CloseAll" action="CloseAll"/>
-            <menuitem name="CloseOthers" action="CloseOthers"/>
-        </placeholder>
-    </popup>
 </ui>"""
 
 
@@ -55,11 +49,8 @@ def lookup_widget(base, widget_name):
 class TabsExtendPlugin(GObject.Object, Gedit.WindowActivatable):
 
     __gtype_name__ = "TabsExtendPlugin"
-
     window = GObject.property(type=Gedit.Window)
-
     handler_ids = []
-
     tabs_closed = []
 
     def __init__(self):
@@ -78,28 +69,29 @@ class TabsExtendPlugin(GObject.Object, Gedit.WindowActivatable):
     def do_deactivate(self):
         """Deactivate plugin."""
         for (widget, handler_id) in self.handler_ids:
-            widget.disconnect(handler_id)
+            if(widget.handler_is_connected(handler_id)):
+                widget.disconnect(handler_id)
 
-        data = self.window.get_data(self.__class__.__name__)
+        data = self.window.TabsExtendPlugin
         ui_manager = self.window.get_ui_manager()
         ui_manager.remove_ui(data['ui_id'])
         ui_manager.remove_action_group(data['action_group'])
         ui_manager.ensure_update()
-        self.window.set_data(self.__class__.__name__, None)
+        self.window.TabsExtendPlugin = None
 
         self.notebook = None
         self.handler_ids = []
 
     def do_update_state(self):
         """Update the sensitivities of actions."""
-        windowdata = self.window.get_data(self.__class__.__name__)
-
+        windowdata = self.window.TabsExtendPlugin
+ 
         undo_close = windowdata['action_group'].get_action('UndoClose')
         undo_close.set_sensitive(len(self.tabs_closed) > 0)
-
+ 
         close_all = windowdata['action_group'].get_action('CloseAll')
         close_all.set_sensitive(self.notebook.get_n_pages() > 0)
-
+ 
         close_others = windowdata['action_group'].get_action('CloseOthers')
         close_others.set_sensitive(self.notebook.get_n_pages() > 1)
 
@@ -116,7 +108,7 @@ class TabsExtendPlugin(GObject.Object, Gedit.WindowActivatable):
             '<Ctrl><Shift>O', 'Open the folder containing the current document',
             self.on_close_outher)
 
-        action_group = Gtk.ActionGroup(self.__class__.__name__)
+        action_group = Gtk.ActionGroup(TabsExtendPlugin)
         action_group.add_actions([undoclose, closeall, closeothers])
 
         ui_manager = self.window.get_ui_manager()
@@ -124,7 +116,7 @@ class TabsExtendPlugin(GObject.Object, Gedit.WindowActivatable):
         ui_id = ui_manager.add_ui_from_string(ACTIONS_UI)
 
         data = { 'action_group': action_group, 'ui_id': ui_id }
-        self.window.set_data(self.__class__.__name__, data)
+        self.window.TabsExtendPlugin = data
         self.do_update_state()
 
     def get_notebook(self):
@@ -163,10 +155,8 @@ class TabsExtendPlugin(GObject.Object, Gedit.WindowActivatable):
         """ Get current line for documento """
         return document.get_iter_at_mark(document.get_insert()).get_line() + 1
 
-    # TODO: Save position tab
     def save_tab_to_undo(self, tab):
         """ Save close tabs """
-
         document = tab.get_document()
         if document.get_location() != None:
             self.tabs_closed.append(
@@ -178,9 +168,9 @@ class TabsExtendPlugin(GObject.Object, Gedit.WindowActivatable):
             uri, line = tab = self.tabs_closed[-1:][0]
 
         if uri == None:
-            self.window.create_tab(True)
+            pass
         else:
-            self.window.create_tab_from_uri(uri, None, line, True, True)
+            self.window.create_tab_from_location(uri, None, line, 0, False, True)
 
         self.tabs_closed.remove(tab)
         self.do_update_state()
